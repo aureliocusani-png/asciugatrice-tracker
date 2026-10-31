@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracker Asciugature Inverno</title>
+    <!-- Tailwind CSS per una grafica pulita e responsive -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4">
+    <div class="max-w-md mx-auto space-y-6">
+        
+        <!-- Intestazione -->
+        <header class="text-center">
+            <h1 class="text-2xl font-bold text-sky-400">Tracker Asciugatrice</h1>
+            <p class="text-sm text-slate-400">Gestione costi e consumi invernali</p>
+        </header>
+
+        <!-- Pannello Totali -->
+        <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
+                <span class="block text-xs text-slate-400">Oggi</span>
+                <span id="stat-daily" class="text-lg font-bold text-emerald-400">€ 0.00</span>
+            </div>
+            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
+                <span class="block text-xs text-slate-400">Questa Settimana</span>
+                <span id="stat-weekly" class="text-lg font-bold text-sky-400">€ 0.00</span>
+            </div>
+            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
+                <span class="block text-xs text-slate-400">Questo Mese</span>
+                <span id="stat-monthly" class="text-lg font-bold text-purple-400">€ 0.00</span>
+            </div>
+        </div>
+
+        <!-- Form Inserimento -->
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4">
+            <h2 class="text-lg font-semibold text-slate-200">Nuova Asciugatura</h2>
+            
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">Data</label>
+                <input type="date" id="input-date" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white">
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Durata (Minuti)</label>
+                    <input type="number" id="input-minutes" value="60" step="15" min="15" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Costo ogni 15 min (€)</label>
+                    <input type="number" id="input-rate" value="0.25" step="0.01" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white">
+                </div>
+            </div>
+
+            <button onclick="addSession()" class="w-full bg-sky-600 hover:bg-sky-500 font-semibold py-2 rounded transition">Registra Asciugatura</button>
+        </div>
+
+        <!-- Storico Giorni -->
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-3">
+            <h2 class="text-lg font-semibold text-slate-200">Storico Sessioni</h2>
+            <div id="sessions-list" class="space-y-2 max-h-60 overflow-y-auto text-sm">
+                <p class="text-slate-500 text-center">Caricamento...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Configurazione Supabase precompilata con chiave aggiornata
+        const SUPABASE_URL = 'https://avxfltymuhnumvqznxfw.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_ZamRqj1d6kyuoOiBbEbagg_zFkeOee2';
+        const { createClient } = supabase;
+        const _supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Imposta la data odierna di default nel form
+        document.getElementById('input-date').valueAsDate = new Date();
+
+        async function fetchSessions() {
+            const { data, error } = await _supabase
+                .from('drying_sessions')
+                .select('*')
+                .order('date', { ascending: false });
+
+            if (error) {
+                console.error('Errore nel recupero dati:', error);
+                return;
+            }
+
+            renderData(data);
+        }
+
+        async function addSession() {
+            const date = document.getElementById('input-date').value;
+            const minutes = parseInt(document.getElementById('input-minutes').value);
+            const rate = parseFloat(document.getElementById('input-rate').value);
+
+            if (!date || isNaN(minutes) || isNaN(rate)) {
+                alert('Compila tutti i campi correttamente.');
+                return;
+            }
+
+            // Calcolo costo: (minuti / 15) * costo per 15 min
+            const totalCost = (minutes / 15) * rate;
+
+            const { error } = await _supabase.from('drying_sessions').insert([
+                { date, duration_minutes: minutes, cost_per_15min: rate, total_cost: totalCost }
+            ]);
+
+            if (error) {
+                alert('Errore durante il salvataggio: ' + error.message);
+            } else {
+                fetchSessions();
+            }
+        }
+
+        async function deleteSession(id) {
+            if (!confirm('Vuoi eliminare questa voce?')) return;
+            const { error } = await _supabase.from('drying_sessions').delete().eq('id', id);
+            if (!error) fetchSessions();
+        }
+
+        function renderData(sessions) {
+            const listEl = document.getElementById('sessions-list');
+            listEl.innerHTML = '';
+
+            let dailyTotal = 0;
+            let weeklyTotal = 0;
+            let monthlyTotal = 0;
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const now = new Date();
+
+            if (sessions.length === 0) {
+                listEl.innerHTML = '<p class="text-slate-500 text-center">Nessuna asciugatura registrata.</p>';
+                updateStats(0, 0, 0);
+                return;
+            }
+
+            sessions.forEach(s => {
+                const sDate = new Date(s.date);
+                if (s.date === todayStr) dailyTotal += parseFloat(s.total_cost);
+                
+                const diffTime = Math.abs(now - sDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays <= 7) weeklyTotal += parseFloat(s.total_cost);
+                if (sDate.getMonth() === now.getMonth() && sDate.getFullYear() === now.getFullYear()) {
+                    monthlyTotal += parseFloat(s.total_cost);
+                }
+
+                const item = document.createElement('div');
+                item.className = 'flex justify-between items-center bg-slate-900 p-2 rounded border border-slate-700/50';
+                item.innerHTML = `
+                    <div>
+                        <span class="font-medium text-slate-300">${s.date}</span>
+                        <span class="text-xs text-slate-400 block">${s.duration_minutes} min (${s.cost_per_15min}€ / 15m)</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-emerald-400">€ ${parseFloat(s.total_cost).toFixed(2)}</span>
+                        <button onclick="deleteSession('${s.id}')" class="text-red-400 hover:text-red-300 text-xs">✕</button>
+                    </div>
+                `;
+                listEl.appendChild(item);
+            });
+
+            updateStats(dailyTotal, weeklyTotal, monthlyTotal);
+        }
+
+        function updateStats(daily, weekly, monthly) {
+            document.getElementById('stat-daily').innerText = `€ ${daily.toFixed(2)}`;
+            document.getElementById('stat-weekly').innerText = `€ ${weekly.toFixed(2)}`;
+            document.getElementById('stat-monthly').innerText = `€ ${monthly.toFixed(2)}`;
+        }
+
+        fetchSessions();
+    </script>
+</body>
+</html>
