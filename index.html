@@ -88,6 +88,16 @@
         // Imposta la data odierna di default nel form
         document.getElementById('input-date').valueAsDate = new Date();
 
+        // Funzione per formattare la data da AAAA-MM-GG a GG/MM/AAAA
+        function formatDateIT(dateStr) {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-');
+            if (parts.length === 3) {
+                return `${parts[2]}/${parts[1]}/${parts[0]}`;
+            }
+            return dateStr;
+        }
+
         async function fetchSessions() {
             const { data, error } = await _supabase
                 .from('drying_sessions')
@@ -161,11 +171,13 @@
                     monthlyTotal += parseFloat(s.total_cost);
                 }
 
+                const formattedDate = formatDateIT(s.date);
+
                 const item = document.createElement('div');
                 item.className = 'flex justify-between items-center bg-slate-900 p-2 rounded border border-slate-700/50';
                 item.innerHTML = `
                     <div>
-                        <span class="font-medium text-slate-300">${s.date}</span>
+                        <span class="font-medium text-slate-300">${formattedDate}</span>
                         <span class="text-xs text-slate-400 block">${s.duration_minutes} min (${s.cost_per_15min}€ / 15m)</span>
                     </div>
                     <div class="flex items-center gap-3">
@@ -210,7 +222,8 @@
 
             content += "\n--- DETTAGLIO SESSIONI ---\n";
             cachedSessions.forEach(s => {
-                content += `Data: ${s.date} | Durata: ${s.duration_minutes} min | Tariffa: ${s.cost_per_15min}€/15m | Totale: € ${parseFloat(s.total_cost).toFixed(2)}\n`;
+                const formattedDate = formatDateIT(s.date);
+                content += `Data: ${formattedDate} | Durata: ${s.duration_minutes} min | Tariffa: ${s.cost_per_15min}€/15m | Totale: € ${parseFloat(s.total_cost).toFixed(2)}\n`;
             });
 
             // Crea il file di testo e avvia il download automatico
