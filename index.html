@@ -46,7 +46,12 @@
             <div class="grid grid-cols-2 gap-2">
                 <div>
                     <label class="block text-xs text-slate-400 mb-1">Durata (Minuti)</label>
-                    <input type="number" id="input-minutes" value="30" step="15" min="15" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white">
+                    <select id="input-minutes" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white">
+                        <option value="15">15 minuti</option>
+                        <option value="30" selected>30 minuti</option>
+                        <option value="45">45 minuti</option>
+                        <option value="60">60 minuti</option>
+                    </select>
                 </div>
                 <div>
                     <label class="block text-xs text-slate-400 mb-1">Costo ogni 15 min (€)</label>
@@ -57,9 +62,12 @@
             <button onclick="addSession()" class="w-full bg-sky-600 hover:bg-sky-500 font-semibold py-2 rounded transition">Registra Asciugatura</button>
         </div>
 
-        <!-- Storico Giorni -->
+        <!-- Storico Giorni e Pulsante Export -->
         <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-3">
-            <h2 class="text-lg font-semibold text-slate-200">Storico Sessioni</h2>
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-slate-200">Storico Sessioni</h2>
+                <button onclick="exportData()" class="bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold px-3 py-1.5 rounded transition">Export txt</button>
+            </div>
             <div id="sessions-list" class="space-y-2 max-h-60 overflow-y-auto text-sm">
                 <p class="text-slate-500 text-center">Caricamento...</p>
             </div>
@@ -68,11 +76,14 @@
     </div>
 
     <script>
-        // Configurazione Supabase precompilata con chiave aggiornata
+        // Configurazione Supabase precompilata
         const SUPABASE_URL = 'https://avxfltymuhnumvqznxfw.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_ZamRqj1d6kyuoOiBbEbagg_zFkeOee2';
         const { createClient } = supabase;
         const _supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Variabile globale per memorizzare le sessioni scaricate
+        let cachedSessions = [];
 
         // Imposta la data odierna di default nel form
         document.getElementById('input-date').valueAsDate = new Date();
@@ -88,7 +99,8 @@
                 return;
             }
 
-            renderData(data);
+            cachedSessions = data || [];
+            renderData(cachedSessions);
         }
 
         async function addSession() {
@@ -171,6 +183,46 @@
             document.getElementById('stat-daily').innerText = `€ ${daily.toFixed(2)}`;
             document.getElementById('stat-weekly').innerText = `€ ${weekly.toFixed(2)}`;
             document.getElementById('stat-monthly').innerText = `€ ${monthly.toFixed(2)}`;
+        }
+
+        function exportData() {
+            if (cachedSessions.length === 0) {
+                alert('Nessuna sessione da esportare.');
+                return;
+            }
+
+            // Raggruppa i totali per mese (es. "2026-10")
+            const monthlySums = {};
+            cachedSessions.forEach(s => {
+                const monthKey = s.date.substring(0, 7); // Anno-Mese
+                if (!monthlySums[monthKey]) {
+                    monthlySums[monthKey] = 0;
+                }
+                monthlySums[monthKey] += parseFloat(s.total_cost);
+            });
+
+            // Costruisce il testo del file
+            let content = "=== REPORT ASCIUGATURE INVERNO ===\n\n";
+            content += "--- SOMME MENSILI ---\n";
+            for (const [month, total] of Object.entries(monthlySums)) {
+                content += `Mese: ${month} -> Totale: € ${total.toFixed(2)}\n`;
+            }
+
+            content += "\n--- DETTAGLIO SESSIONI ---\n";
+            cachedSessions.forEach(s => {
+                content += `Data: ${s.date} | Durata: ${s.duration_minutes} min | Tariffa: ${s.cost_per_15min}€/15m | Totale: € ${parseFloat(s.total_cost).toFixed(2)}\n`;
+            });
+
+            // Crea il file di testo e avvia il download automatico
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'report_asciugature.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         fetchSessions();
