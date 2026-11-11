@@ -18,7 +18,7 @@
             <p class="text-sm text-slate-400">Gestione costi e consumi invernali</p>
         </header>
 
-        <!-- Pannello Totali -->
+        <!-- Pannello Totali Monetari -->
         <div class="grid grid-cols-3 gap-2 text-center">
             <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
                 <span class="block text-xs text-slate-400">Oggi</span>
@@ -31,6 +31,19 @@
             <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
                 <span class="block text-xs text-slate-400">Questo Mese</span>
                 <span id="stat-monthly" class="text-lg font-bold text-purple-400">€ 0.00</span>
+            </div>
+        </div>
+
+        <!-- Pannello Conteggio Asciugature (Totale e Stagionale) -->
+        <div class="grid grid-cols-2 gap-3 text-center">
+            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
+                <span class="block text-xs text-slate-400">Stagione (Dal 1° Set)</span>
+                <span id="stat-count-season" class="text-xl font-bold text-amber-400">0</span>
+            </div>
+            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
+                <span class="block text-xs text-slate-400">Totale Cicli</span>
+                <span id="stat-count-total" class="text-xl font-bold text-sky-300">0</span>
+                <span id="stat-start-date" class="block text-[10px] text-slate-500 mt-0.5">Dal: -</span>
             </div>
         </div>
 
@@ -150,25 +163,47 @@
             let dailyTotal = 0;
             let weeklyTotal = 0;
             let monthlyTotal = 0;
+            let seasonCount = 0;
+            let totalCount = sessions.length;
+            let oldestDate = null;
 
             const todayStr = new Date().toISOString().split('T')[0];
             const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1; // 1-12
+
+            // Definizione intervallo stagione (1 Settembre anno X -> 31 Agosto anno X+1)
+            let seasonStartYear = currentMonth >= 9 ? currentYear : currentYear - 1;
+            let seasonStartDate = new Date(`${seasonStartYear}-09-01`);
+            let seasonEndDate = new Date(`${seasonStartYear + 1}-08-31`);
 
             if (sessions.length === 0) {
                 listEl.innerHTML = '<p class="text-slate-500 text-center">Nessuna asciugatura registrata.</p>';
-                updateStats(0, 0, 0);
+                updateStats(0, 0, 0, 0, 0, '-');
                 return;
             }
 
+            // Trova la data più vecchia ordinando in modo crescente per data
+            const sortedAsc = [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date));
+            oldestDate = sortedAsc[0].date;
+
             sessions.forEach(s => {
                 const sDate = new Date(s.date);
+                
+                // Totali monetari
                 if (s.date === todayStr) dailyTotal += parseFloat(s.total_cost);
                 
                 const diffTime = Math.abs(now - sDate);
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 if (diffDays <= 7) weeklyTotal += parseFloat(s.total_cost);
+                
                 if (sDate.getMonth() === now.getMonth() && sDate.getFullYear() === now.getFullYear()) {
                     monthlyTotal += parseFloat(s.total_cost);
+                }
+
+                // Conteggio stagione in corso
+                if (sDate >= seasonStartDate && sDate <= seasonEndDate) {
+                    seasonCount++;
                 }
 
                 const formattedDate = formatDateIT(s.date);
@@ -188,13 +223,16 @@
                 listEl.appendChild(item);
             });
 
-            updateStats(dailyTotal, weeklyTotal, monthlyTotal);
+            updateStats(dailyTotal, weeklyTotal, monthlyTotal, seasonCount, totalCount, formatDateIT(oldestDate));
         }
 
-        function updateStats(daily, weekly, monthly) {
+        function updateStats(daily, weekly, monthly, seasonCount, totalCount, startDateFormatted) {
             document.getElementById('stat-daily').innerText = `€ ${daily.toFixed(2)}`;
             document.getElementById('stat-weekly').innerText = `€ ${weekly.toFixed(2)}`;
             document.getElementById('stat-monthly').innerText = `€ ${monthly.toFixed(2)}`;
+            document.getElementById('stat-count-season').innerText = seasonCount;
+            document.getElementById('stat-count-total').innerText = totalCount;
+            document.getElementById('stat-start-date').innerText = `Dal: ${startDateFormatted}`;
         }
 
         function exportData() {
