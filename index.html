@@ -18,7 +18,7 @@
             <p class="text-sm text-slate-400">Gestione costi e consumi invernali</p>
         </header>
 
-        <!-- Pannello Totali Monetari -->
+        <!-- Pannello Totali Monetari Breve Termine -->
         <div class="grid grid-cols-3 gap-2 text-center">
             <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
                 <span class="block text-xs text-slate-400">Oggi</span>
@@ -34,15 +34,17 @@
             </div>
         </div>
 
-        <!-- Pannello Conteggio Asciugature (Totale e Stagionale) -->
+        <!-- Pannello Stagionale e Totale (Cicli + Costi) -->
         <div class="grid grid-cols-2 gap-3 text-center">
-            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
+            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-1">
                 <span class="block text-xs text-slate-400">Stagione (Dal 1° Set)</span>
-                <span id="stat-count-season" class="text-xl font-bold text-amber-400">0</span>
+                <div id="stat-count-season" class="text-lg font-bold text-amber-400">0 cicli</div>
+                <div id="stat-cost-season" class="text-sm font-semibold text-emerald-400">€ 0.00</div>
             </div>
-            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
-                <span class="block text-xs text-slate-400">Totale Cicli</span>
-                <span id="stat-count-total" class="text-xl font-bold text-sky-300">0</span>
+            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-1">
+                <span class="block text-xs text-slate-400">Totale Storico</span>
+                <div id="stat-count-total" class="text-lg font-bold text-sky-300">0 cicli</div>
+                <div id="stat-cost-total" class="text-sm font-semibold text-emerald-400">€ 0.00</div>
                 <span id="stat-start-date" class="block text-[10px] text-slate-500 mt-0.5">Dal: -</span>
             </div>
         </div>
@@ -163,8 +165,12 @@
             let dailyTotal = 0;
             let weeklyTotal = 0;
             let monthlyTotal = 0;
+            
             let seasonCount = 0;
+            let seasonCost = 0;
+            
             let totalCount = sessions.length;
+            let totalCostAll = 0;
             let oldestDate = null;
 
             const todayStr = new Date().toISOString().split('T')[0];
@@ -179,7 +185,7 @@
 
             if (sessions.length === 0) {
                 listEl.innerHTML = '<p class="text-slate-500 text-center">Nessuna asciugatura registrata.</p>';
-                updateStats(0, 0, 0, 0, 0, '-');
+                updateStats(0, 0, 0, 0, 0, 0, 0, '-');
                 return;
             }
 
@@ -189,21 +195,26 @@
 
             sessions.forEach(s => {
                 const sDate = new Date(s.date);
+                const sCost = parseFloat(s.total_cost);
+
+                // Somma totale complessiva
+                totalCostAll += sCost;
                 
-                // Totali monetari
-                if (s.date === todayStr) dailyTotal += parseFloat(s.total_cost);
+                // Totali monetari brevi
+                if (s.date === todayStr) dailyTotal += sCost;
                 
                 const diffTime = Math.abs(now - sDate);
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                if (diffDays <= 7) weeklyTotal += parseFloat(s.total_cost);
+                if (diffDays <= 7) weeklyTotal += sCost;
                 
                 if (sDate.getMonth() === now.getMonth() && sDate.getFullYear() === now.getFullYear()) {
-                    monthlyTotal += parseFloat(s.total_cost);
+                    monthlyTotal += sCost;
                 }
 
-                // Conteggio stagione in corso
+                // Conteggio e costo stagione in corso
                 if (sDate >= seasonStartDate && sDate <= seasonEndDate) {
                     seasonCount++;
+                    seasonCost += sCost;
                 }
 
                 const formattedDate = formatDateIT(s.date);
@@ -216,22 +227,26 @@
                         <span class="text-xs text-slate-400 block">${s.duration_minutes} min (${s.cost_per_15min}€ / 15m)</span>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="font-bold text-emerald-400">€ ${parseFloat(s.total_cost).toFixed(2)}</span>
+                        <span class="font-bold text-emerald-400">€ ${sCost.toFixed(2)}</span>
                         <button onclick="deleteSession('${s.id}')" class="text-red-400 hover:text-red-300 text-xs">✕</button>
                     </div>
                 `;
                 listEl.appendChild(item);
             });
 
-            updateStats(dailyTotal, weeklyTotal, monthlyTotal, seasonCount, totalCount, formatDateIT(oldestDate));
+            updateStats(dailyTotal, weeklyTotal, monthlyTotal, seasonCount, seasonCost, totalCount, totalCostAll, formatDateIT(oldestDate));
         }
 
-        function updateStats(daily, weekly, monthly, seasonCount, totalCount, startDateFormatted) {
+        function updateStats(daily, weekly, monthly, seasonCount, seasonCost, totalCount, totalCostAll, startDateFormatted) {
             document.getElementById('stat-daily').innerText = `€ ${daily.toFixed(2)}`;
             document.getElementById('stat-weekly').innerText = `€ ${weekly.toFixed(2)}`;
             document.getElementById('stat-monthly').innerText = `€ ${monthly.toFixed(2)}`;
-            document.getElementById('stat-count-season').innerText = seasonCount;
-            document.getElementById('stat-count-total').innerText = totalCount;
+            
+            document.getElementById('stat-count-season').innerText = `${seasonCount} cicli`;
+            document.getElementById('stat-cost-season').innerText = `€ ${seasonCost.toFixed(2)}`;
+            
+            document.getElementById('stat-count-total').innerText = `${totalCount} cicli`;
+            document.getElementById('stat-cost-total').innerText = `€ ${totalCostAll.toFixed(2)}`;
             document.getElementById('stat-start-date').innerText = `Dal: ${startDateFormatted}`;
         }
 
